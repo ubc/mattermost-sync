@@ -6,5 +6,10 @@ setup(
    description='Sync LDAP groups to Mattermost team',
    author='Pan Luo',
    author_email='pan.luo@ubc.ca',
-   packages=['mattermost-sync'],  #same as name
+   packages=['mattermostsync'],  #same as name
+   install_requires=[
+      'python-ldap>=3.1.0,<3.2',
+      'mattermostdriver',
+      'click',
+   ]
 )

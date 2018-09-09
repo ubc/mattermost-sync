@@ -3,7 +3,7 @@ import click_log
 import logging
 from requests import HTTPError
 
-from mm import Sync, to_mm_team_name, CourseNotFound
+from mattermostsync import Sync, to_mm_team_name, CourseNotFound
 
 logger = logging.getLogger('lthub.mattermost')
 click_log.basic_config(logger)
