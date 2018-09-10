@@ -4,15 +4,16 @@ import ldap
 import logging
 import re
 from mattermostdriver import Driver
-from mattermostdriver.exceptions import ResourceNotFound
+from mattermostdriver.exceptions import ResourceNotFound, InvalidOrMissingParameters
 from requests import HTTPError
 
 
-def to_mm_team_name(raw_name, campus):
-    team_name = re.sub('20(1[0-9])', r'\1', raw_name.replace('_', ''))
-    if campus == 'UBCO':
-        team_name = team_name + 'O'
-    return team_name
+def to_mm_team_name(raw_name):
+    return re.sub('20(1[0-9])', r'\1', raw_name.replace('_', ''))
+
+
+def split_campus(course):
+    return (course[:-1], 'UBCO') if course.endswith('O') or course.endswith('o') else (course, 'UBC')
 
 
 def get_dummy_email(username):
@@ -21,6 +22,27 @@ def get_dummy_email(username):
 
 class CourseNotFound(RuntimeError):
     pass
+
+
+def parse_course(course):
+    """Parse course names
+    :param course: raw course string
+    :return: course list and target team name
+    """
+    # check if the course name is xlisted
+    xlisted = course.split('=')
+    if len(xlisted) == 2:
+        courses = [split_campus(c) for c in xlisted[0].split('+')]
+        target_team = xlisted[1]
+        if len(target_team) < 2 or len(target_team) > 15:
+            raise ValueError('Invalid team name {}. Team name must be 2–15 characters in length.')
+    elif len(xlisted) > 2:
+        raise ValueError('Invalid course name {}'.format(course))
+    else:
+        target_team = to_mm_team_name(course)
+        courses = [split_campus(course)]
+
+    return courses, target_team
 
 
 class Sync:
@@ -85,6 +107,9 @@ class Sync:
                 'type': 'I'
             })
             self.logger.info('Created team {}.'.format(team_name))
+        except InvalidOrMissingParameters:
+            raise ValueError('Invalid team name. Please see Mattermost team name rules'
+                             '(https://docs.mattermost.com/help/getting-started/creating-teams.html#team-name).')
 
         return team
 

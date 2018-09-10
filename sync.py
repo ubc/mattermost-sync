@@ -3,7 +3,7 @@ import click_log
 import logging
 from requests import HTTPError
 
-from mattermostsync import Sync, to_mm_team_name, CourseNotFound
+from mattermostsync import Sync, to_mm_team_name, CourseNotFound, parse_course
 
 logger = logging.getLogger('lthub.mattermost')
 click_log.basic_config(logger)
@@ -19,10 +19,9 @@ click_log.basic_config(logger)
 )
 @click.option('-b', '--base', help='LDAP search base', envvar='LDAP_SEARCH_BASE', show_default=True)
 @click.option(
-    '-c', '--courses', help='Course names, can be specified multiple times',
+    '-c', '--courses', help='Course names spec, can be specified multiple times',
     envvar='COURSE_NAMES', multiple=True, required=True
 )
-@click.option('-m', '--campus', help='Campus', envvar='CAMPUS', default='UBC', show_default=True)
 @click.option('-r', '--url', help='Mattermost URL', envvar='MM_URL', required=True)
 @click.option('-o', '--port', help='Mattermost port', envvar='MM_PORT', default=443, show_default=True)
 @click.option('-t', '--token', help='Mattermost token', envvar='MM_TOKEN', required=True)
@@ -30,14 +29,9 @@ click_log.basic_config(logger)
     '-s', '--scheme', help='Mattermost scheme', envvar='MM_SCHEME',
     default='https', type=click.Choice(['http', 'https']), show_default=True
 )
-def sync(ldap, bind, password, base, courses, campus, url, port, token, scheme):
+def sync(ldap, bind, password, base, courses, url, port, token, scheme):
     """Sync class roaster from LDAP to Mattermost
     """
-    logger.debug("LDAP Server: {}@{}/{}".format(bind, ldap, base))
-    # logger.debug("LDAP Pass: {}".format(password))
-    logger.debug("Course Name: {}".format(courses))
-    logger.debug("Campus: {}".format(campus))
-
     mm = Sync({
         'url': url,
         'token': token,
@@ -48,17 +42,19 @@ def sync(ldap, bind, password, base, courses, campus, url, port, token, scheme):
     mm.driver.login()
 
     for course in courses:
-        logger.info('Syncing course {}.'.format(course))
+        source_courses, team_name = parse_course(course)
+        logger.info('Syncing course {} to team {}.'.format(source_courses, team_name))
         try:
-            members = mm.get_member_from_ldap(ldap, bind, password, base, course, campus)
+            course_members = []
+            for c in source_courses:
+                course_members.extend(mm.get_member_from_ldap(ldap, bind, password, base, *c))
         except CourseNotFound as e:
             logger.warning(e)
             continue
 
-        team_name = to_mm_team_name(course, campus)
         try:
             team = mm.create_team(team_name)
-            existing_users, failed_users = mm.create_users(members)
+            existing_users, failed_users = mm.create_users(course_members)
 
             # check if the users are already in the team
             members = []
@@ -82,7 +78,7 @@ def sync(ldap, bind, password, base, courses, campus, url, port, token, scheme):
             else:
                 logger.info('No new users to add.')
         except HTTPError as e:
-            logging.error('Failed to sync for course {}: {}'.format(course, e.response.text))
+            logging.error('Failed to sync team {}: {}'.format(team_name, e.args))
             continue
         logger.info('Finished to sync course {}.'.format(course))
 

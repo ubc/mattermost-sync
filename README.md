@@ -29,10 +29,17 @@ python sync.py \
 
 Run `python sync.py --help` for more information
 
-### Course Name
+### Course Name Spec
 
-Course name has to follow [ELDAP naming convention](https://confluence.it.ubc.ca/pages/viewpage.action?pageId=105318449).
+The base course name has to follow [ELDAP naming convention](https://confluence.it.ubc.ca/pages/viewpage.action?pageId=105318449).
+
+For the course in UBCO, append 'O' at the end of the course name, e.g. CPSC_110_101_2018WO
+
+For cross listed courses, use plus `\(+\)` for joining the course and equal `\(=\)` for the team name, e.g. CPSC_110_101_2018W+CPSC_120_102_2018W=MERGED-CPSC
+
+Mattermost has some restrictions on team name as well: https://docs.mattermost.com/help/getting-started/creating-teams.html#team-name
+
 
 ### Multiple Courses
 
-The script can handle multiple courses by apply `-c/--course` parameter multiple times or use `COURSE_NAMES` environment variable with space separated course name list.
+The script can handle multiple courses by apply `-c/--course` parameter multiple times or use `COURSE_NAMES` environment variable with space separated course name spec list.
