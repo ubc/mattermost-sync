@@ -53,7 +53,12 @@ def sync(ldap, bind, password, base, courses, url, port, token, scheme):
             continue
 
         try:
-            team = mm.create_team(team_name)
+            team = mm.get_team_by_name(team_name)
+            if team:
+                logger.info('Team {} already exists.'.format(team_name))
+            else:
+                team = mm.create_team(team_name)
+                logger.info('Team {} is created.'.format(team_name))
             existing_users, failed_users = mm.create_users(course_members)
 
             # check if the users are already in the team

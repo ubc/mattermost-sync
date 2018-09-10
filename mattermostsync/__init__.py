@@ -95,11 +95,18 @@ class Sync:
         self.logger.debug('Students:' + str(members))
         return members
 
-    def create_team(self, team_name):
+    def get_team_by_name(self, team_name):
         try:
             team = self.driver.teams.get_team_by_name(team_name)
-            self.logger.info('Team {} already exists.'.format(team_name))
         except ResourceNotFound:
+            return None
+        except InvalidOrMissingParameters:
+            raise ValueError('Invalid team name. Please see Mattermost team name rules'
+                             '(https://docs.mattermost.com/help/getting-started/creating-teams.html#team-name).')
+        return team
+
+    def create_team(self, team_name):
+        try:
             # no team is found under team_name, create a new one
             team = self.driver.teams.create_team({
                 'name': team_name.lower(),
