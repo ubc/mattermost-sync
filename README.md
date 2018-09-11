@@ -35,10 +35,18 @@ The base course name has to follow [ELDAP naming convention](https://confluence.
 
 For the course in UBCO, append 'O' at the end of the course name, e.g. CPSC_110_101_2018WO
 
-For cross listed courses, use plus `\(+\)` for joining the course and equal `\(=\)` for the team name, e.g. CPSC_110_101_2018W+CPSC_120_102_2018W=MERGED-CPSC
+For cross listed courses, use plus (`+`) for joining the course and equal (`=`) for the team name, e.g. CPSC_110_101_2018W+CPSC_120_102_2018W=MERGED-CPSC
 
 Mattermost has some restrictions on team name as well: https://docs.mattermost.com/help/getting-started/creating-teams.html#team-name
 
+Here are some examples:
+
+| Course Name Spec | Team Name | Note |
+|------------------|-----------|------|
+| CPSC_101_201_2018W | CPSC10120118W | UBCV course |
+| CPSC_101_301_2018WO | CPSC10130118WO | UBCO course |
+| CPSC_101_101_2018W=CUSTOM-TEAM-NAME | CUSTOM-TEAM-NAME | Custom team name with linked the course |
+| CPSC_101_101_2018W+CPSC_101_102_2018W=XLISTED-CPSC-101| XLISTED-CPSC-101 | Cross list two CPSC section and custom team name |
 
 ### Multiple Courses
 
