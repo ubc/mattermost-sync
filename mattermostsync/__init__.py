@@ -49,11 +49,11 @@ class Sync:
     def __init__(self, config):
         self.logger = logging.getLogger('lthub.mattermost.sync')
         self.config = config
-        self.driver = Driver(config)
+        self.driver = Driver({k: config[k] for k in config.keys() & Driver.default_options.keys()})
 
-    def get_member_from_ldap(self, server, bind, password, base, course, campus='UBC'):
-        ldap_server = ldap.initialize(server)
-        ldap_server.simple_bind_s(bind, password)
+    def get_member_from_ldap(self, base, course, campus='UBC'):
+        ldap_server = ldap.initialize(self.config['ldap_uri'])
+        ldap_server.simple_bind_s(self.config['bind_user'], self.config['bind_password'])
         ldap_filter = '(&(cn={})(ou:dn:={}))'.format(course, campus)
         r = ldap_server.search_s(base, ldap.SCOPE_SUBTREE, ldap_filter, ['uniqueMember'])
 
@@ -162,6 +162,7 @@ class Sync:
         Add users to team in bulk
         :param users: list of users
         :param team_id: team id
+        :param roles: string for role info, e.g. 'team_member', 'team_admin'
         """
         self.logger.debug('Adding {} user to team id {} as {}.'.format(len(users), team_id, roles))
         users_to_add = []

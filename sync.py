@@ -3,7 +3,7 @@ import click_log
 import logging
 from requests import HTTPError
 
-from mattermostsync import Sync, to_mm_team_name, CourseNotFound, parse_course
+from mattermostsync import Sync, CourseNotFound, parse_course
 
 logger = logging.getLogger('lthub.mattermost')
 click_log.basic_config(logger)
@@ -37,7 +37,10 @@ def sync(ldap, bind, password, base, courses, url, port, token, scheme):
         'token': token,
         'port': port,
         'scheme': scheme,
-        'debug': logger.getEffectiveLevel() <= logging.DEBUG
+        'debug': logger.getEffectiveLevel() <= logging.DEBUG,
+        'ldap_uri': ldap,
+        'bind_user': bind,
+        'bind_password':  password
     })
     mm.driver.login()
 
@@ -47,7 +50,7 @@ def sync(ldap, bind, password, base, courses, url, port, token, scheme):
         try:
             course_members = []
             for c in source_courses:
-                course_members.extend(mm.get_member_from_ldap(ldap, bind, password, base, *c))
+                course_members.extend(mm.get_member_from_ldap(base, *c))
         except CourseNotFound as e:
             logger.warning(e)
             continue
