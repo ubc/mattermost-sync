@@ -157,19 +157,19 @@ class Sync:
     def get_team_members(self, team_id, params=None):
         return self.driver.teams.get_team_members(team_id, params)
 
-    def add_users_to_team(self, users, team_id):
+    def add_users_to_team(self, users, team_id, roles='team_user'):
         """
         Add users to team in bulk
         :param users: list of users
         :param team_id: team id
         """
-        self.logger.debug('Adding {} user to team id {}.'.format(len(users), team_id))
+        self.logger.debug('Adding {} user to team id {} as {}.'.format(len(users), team_id, roles))
         users_to_add = []
         for u in users:
             users_to_add.append({
                 'team_id': team_id,
                 'user_id': u['id'],
-                'roles': 'team_user'
+                'roles': roles
             })
 
         # split into chunks
