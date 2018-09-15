@@ -8,6 +8,9 @@ from mattermostdriver.exceptions import ResourceNotFound, InvalidOrMissingParame
 from requests import HTTPError
 
 
+LDAP_USER_SEARCH_BASE = 'ou=PEOPLE,ou=IDM,dc=id,dc=ubc,dc=ca'
+
+
 def to_mm_team_name(raw_name):
     return re.sub('20(1[0-9])', r'\1', raw_name.replace('_', ''))
 
@@ -64,27 +67,11 @@ class Sync:
         member_emails = []
         for dn, entry in r:
             self.logger.info('Processing {}'.format(dn))
-            member_filter = "(|({}))".format(b')('.join(entry['uniqueMember']).decode("utf-8")).replace(
-                ',ou=PEOPLE,ou=IDM,dc=id,dc=ubc,dc=ca', '')
-            result = ldap_server.search_s(
-                'ou=PEOPLE,ou=IDM,dc=id,dc=ubc,dc=ca',
-                ldap.SCOPE_SUBTREE, member_filter,
-                # ['cn', 'sn', 'ubcEduCwlPUID', 'uid', 'displayName', 'givenName', 'mail']
-                ['sn', 'ubcEduCwlPUID', 'uid', 'givenName', 'mail']
-            )
-            for member_dn, member in result:
-                m = {
-                    # 'email': member['mail'][0].decode('utf-8').replace('@', 'noemail@') if 'mail' in member else '',
-                    'email': member['mail'][0].decode('utf-8') if 'mail' in member else '',
-                    'username': member['uid'][0].decode('utf-8'),
-                    'first_name': member['givenName'][0].decode('utf-8'),
-                    'last_name': member['sn'][0].decode('utf-8'),
-                    # 'nickname': member['displayName'][0].decode('utf-8'),
-                    # 'cn': member['cn'][0].decode('utf-8'),
-                    'props': {
-                        'puid': member['ubcEduCwlPUID'][0].decode('utf-8')
-                    }
-                }
+            usernames = [x.decode('utf-8').replace(',' + LDAP_USER_SEARCH_BASE, '').replace('cn=', '')
+                         for x in entry['uniqueMember']]
+            users = self.get_users_from_ldap(usernames, ldap_server=ldap_server)
+            # remove members with duplicate email
+            for m in users:
                 if m['email'] in member_emails:
                     self.logger.warning('Found duplicate email, skipping: {}'.format(json.dumps(m)))
                     continue
@@ -94,6 +81,40 @@ class Sync:
         self.logger.info('Get {} student in course {} {}'.format(len(members), course, campus))
         self.logger.debug('Students:' + str(members))
         return members
+
+    def get_users_from_ldap(self, usernames, ldap_server=None):
+        if not ldap_server:
+            ldap_server = ldap.initialize(self.config['ldap_uri'])
+            ldap_server.simple_bind_s(self.config['bind_user'], self.config['bind_password'])
+
+        if not isinstance(usernames, list):
+            usernames = [usernames]
+
+        user_filter = "(|(cn={}))".format(')(cn='.join(usernames))
+
+        result = ldap_server.search_s(
+            LDAP_USER_SEARCH_BASE,
+            ldap.SCOPE_SUBTREE, user_filter,
+            # ['cn', 'sn', 'ubcEduCwlPUID', 'uid', 'displayName', 'givenName', 'mail']
+            ['sn', 'ubcEduCwlPUID', 'uid', 'givenName', 'mail']
+        )
+
+        users = []
+        for member_dn, member in result:
+            m = {
+                # 'email': member['mail'][0].decode('utf-8').replace('@', 'noemail@') if 'mail' in member else '',
+                'email'     : member['mail'][0].decode('utf-8') if 'mail' in member else '',
+                'username'  : member['uid'][0].decode('utf-8'),
+                'first_name': member['givenName'][0].decode('utf-8'),
+                'last_name' : member['sn'][0].decode('utf-8'),
+                # 'nickname': member['displayName'][0].decode('utf-8'),
+                # 'cn': member['cn'][0].decode('utf-8'),
+                'props'     : {
+                    'puid': member['ubcEduCwlPUID'][0].decode('utf-8')
+                }
+            }
+            users.append(m)
+        return users
 
     def get_team_by_name(self, team_name):
         try:
