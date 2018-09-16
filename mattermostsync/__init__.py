@@ -67,7 +67,7 @@ class Sync:
         member_emails = []
         for dn, entry in r:
             self.logger.info('Processing {}'.format(dn))
-            usernames = [x.decode('utf-8').replace(',' + LDAP_USER_SEARCH_BASE, '').replace('cn=', '')
+            usernames = [x.decode('utf-8').replace(',' + LDAP_USER_SEARCH_BASE, '').replace('uid=', '')
                          for x in entry['uniqueMember']]
             users = self.get_users_from_ldap(usernames, ldap_server=ldap_server)
             # remove members with duplicate email
@@ -90,7 +90,7 @@ class Sync:
         if not isinstance(usernames, list):
             usernames = [usernames]
 
-        user_filter = "(|(cn={}))".format(')(cn='.join(usernames))
+        user_filter = "(|(uid={}))".format(')(uid='.join(usernames))
 
         result = ldap_server.search_s(
             LDAP_USER_SEARCH_BASE,
