@@ -9,6 +9,8 @@ from requests import HTTPError
 
 
 LDAP_USER_SEARCH_BASE = 'ou=PEOPLE,ou=IDM,dc=id,dc=ubc,dc=ca'
+# ['cn', 'sn', 'ubcEduCwlPUID', 'uid', 'displayName', 'givenName', 'mail']
+LDAP_ATTRIBUTES = ('sn', 'ubcEduCwlPUID', 'uid', 'givenName', 'mail')
 
 
 def to_mm_team_name(raw_name):
@@ -54,7 +56,7 @@ class Sync:
         self.config = config
         self.driver = Driver({k: config[k] for k in config.keys() & Driver.default_options.keys()})
 
-    def get_member_from_ldap(self, base, course, campus='UBC'):
+    def get_member_from_ldap(self, base, course, campus='UBC', attributes=LDAP_ATTRIBUTES):
         ldap_server = ldap.initialize(self.config['ldap_uri'])
         ldap_server.simple_bind_s(self.config['bind_user'], self.config['bind_password'])
         ldap_filter = '(&(cn={})(ou:dn:={}))'.format(course, campus)
@@ -69,7 +71,7 @@ class Sync:
             self.logger.info('Processing {}'.format(dn))
             usernames = [x.decode('utf-8').replace(',' + LDAP_USER_SEARCH_BASE, '').replace('uid=', '')
                          for x in entry['uniqueMember']]
-            users = self.get_users_from_ldap(usernames, ldap_server=ldap_server)
+            users = self.get_users_from_ldap(usernames, ldap_server=ldap_server, attributes=attributes)
             # remove members with duplicate email
             for m in users:
                 if m['email'] in member_emails:
@@ -82,7 +84,7 @@ class Sync:
         self.logger.debug('Students:' + str(members))
         return members
 
-    def get_users_from_ldap(self, usernames, ldap_server=None):
+    def get_users_from_ldap(self, usernames, ldap_server=None, attributes=LDAP_ATTRIBUTES):
         if not ldap_server:
             ldap_server = ldap.initialize(self.config['ldap_uri'])
             ldap_server.simple_bind_s(self.config['bind_user'], self.config['bind_password'])
@@ -95,8 +97,7 @@ class Sync:
         result = ldap_server.search_s(
             LDAP_USER_SEARCH_BASE,
             ldap.SCOPE_SUBTREE, user_filter,
-            # ['cn', 'sn', 'ubcEduCwlPUID', 'uid', 'displayName', 'givenName', 'mail']
-            ['sn', 'ubcEduCwlPUID', 'uid', 'givenName', 'mail']
+            attributes
         )
 
         users = []
@@ -113,6 +114,8 @@ class Sync:
                     'puid': member['ubcEduCwlPUID'][0].decode('utf-8')
                 }
             }
+            if 'ubcEduStudentNumber' in member:
+                m['props']['student_number'] = member['ubcEduStudentNumber'][0].decode('utf-8')
             users.append(m)
         return users
 
