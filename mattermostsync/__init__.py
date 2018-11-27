@@ -129,13 +129,16 @@ class Sync:
                              '(https://docs.mattermost.com/help/getting-started/creating-teams.html#team-name).')
         return team
 
-    def create_team(self, team_name):
+    def create_team(self, team_name, display_name='', team_type='I'):
+        if not display_name:
+            display_name = team_name
+
         try:
             # no team is found under team_name, create a new one
             team = self.driver.teams.create_team({
                 'name': team_name.lower(),
-                'display_name': team_name,
-                'type': 'I'
+                'display_name': display_name,
+                'type': team_type
             })
             self.logger.info('Created team {}.'.format(team_name))
         except InvalidOrMissingParameters:
