@@ -8,7 +8,7 @@ setup(
    author_email='pan.luo@ubc.ca',
    packages=['mattermostsync'],  #same as name
    install_requires=[
-      'python-ldap>=3.1.0,<3.2',
+      'python-ldap>=3.1.0,<3.5',
       'mattermostdriver',
       'click',
    ]
