@@ -69,6 +69,8 @@ class Sync:
         member_emails = []
         for dn, entry in r:
             self.logger.info('Processing {}'.format(dn))
+            if (len(entry) == 0):
+                continue
             usernames = [x.decode('utf-8').replace(',' + LDAP_USER_SEARCH_BASE, '').replace('uid=', '')
                          for x in entry['uniqueMember']]
             users = self.get_users_from_ldap(usernames, ldap_server=ldap_server, attributes=attributes)
@@ -126,7 +128,8 @@ class Sync:
             return None
         except InvalidOrMissingParameters:
             raise ValueError('Invalid team name. Please see Mattermost team name rules'
-                             '(https://docs.mattermost.com/help/getting-started/creating-teams.html#team-name).')
+                             ' (https://docs.mattermost.com/help/getting-started/creating-teams.html#team-name).\n'
+                             'Hint: did you include underscore("-") in the team name?')
         return team
 
     def create_team(self, team_name, display_name='', team_type='I'):
