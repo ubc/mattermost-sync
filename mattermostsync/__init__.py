@@ -3,10 +3,13 @@ import json
 import ldap
 import logging
 import re
+
+from ldap.controls import SimplePagedResultsControl
 from mattermostdriver import Driver
 from mattermostdriver.exceptions import ResourceNotFound, InvalidOrMissingParameters
 from requests import HTTPError
 
+## SECTIONS ##############
 
 LDAP_USER_SEARCH_BASE = 'ou=PEOPLE,ou=IDM,dc=id,dc=ubc,dc=ca'
 # ['cn', 'sn', 'ubcEduCwlPUID', 'uid', 'displayName', 'givenName', 'mail']
@@ -18,7 +21,9 @@ def to_mm_team_name(raw_name):
 
 
 def split_campus(course):
-    return (course[:-1], 'UBCO') if course.endswith('O') or course.endswith('o') else (course, 'UBC')
+    print("XXXXX split_campus:::" + course)
+    ##return (course[:-1], 'UBCO') if course.endswith('O') or course.endswith('o') else (course, 'UBC')
+    return (course[:-1], 'O') if course.endswith('O') or course.endswith('o') else (course, 'V')
 
 
 def get_dummy_email(username):
@@ -56,11 +61,39 @@ class Sync:
         self.config = config
         self.driver = Driver({k: config[k] for k in config.keys() & Driver.default_options.keys()})
 
-    def get_member_from_ldap(self, base, course, campus='UBC', attributes=LDAP_ATTRIBUTES):
+    def get_member_from_ldap(self, base, course, campus='V', attributes=LDAP_ATTRIBUTES):
+        print("XXXXXX:get_member_from_ldap")
         ldap_server = ldap.initialize(self.config['ldap_uri'])
+        print("XXXXXX:get_member_from_ldap:ldap_server:" + self.config['ldap_uri'])
+        print("XXXXXX:SIMPLE_BIND:ldap_server:" + self.config['bind_user'] + ":::" + self.config['bind_password'])
+
+        # Split the course string into its components
+        parts = course.split()
+
+        # Assign the components to respective variables
+        CourseSubjectCode = parts[0]  # 'ELEC_A'
+        CourseNumber = parts[1]  # '201'
+        CourseSectionNumber = parts[2]
+        CourseAcademicYear = parts[3] # 2024
+        courseCN = "students"
+
+        # Create the LDAP filter using the new variables
+        ldap_filter = '(&(cn={})(ubcAcademicYear={})(ubcCourseSubjectCode={})(ubcCourseNumber={})(ubcCourseSectionNumber={})(ou:dn:={}))'.format(
+            courseCN, CourseAcademicYear, CourseSubjectCode, CourseNumber, CourseSectionNumber, campus
+        )
+        #ldap_filter = '(&(cn={})(ou:dn:={}))'.format(course, campus)
+        print("XXXXXXX:ldap_filter:" + ldap_filter)
+        print("XXXXXXX:bind_user:" + self.config['bind_user'])
+
         ldap_server.simple_bind_s(self.config['bind_user'], self.config['bind_password'])
-        ldap_filter = '(&(cn={})(ou:dn:={}))'.format(course, campus)
-        r = ldap_server.search_s(base, ldap.SCOPE_SUBTREE, ldap_filter, ['uniqueMember'])
+        ##ldap_filter = '(&(cn={})(ou:dn:={}))'.format(course, campus)
+        print("XXXXX--X:BASE:" + base)
+        print("XXXXX--X:ldap.SCOPE_SUBTREE:" + str(ldap.SCOPE_SUBTREE))
+        print("XXXXX--X:ldap_filter:" + str(ldap_filter))
+
+        ##r = ldap_server.search_s(base, ldap.SCOPE_SUBTREE, ldap_filter, ['uniqueMember'])
+        req_ctrl = SimplePagedResultsControl(criticality=True, size=1, cookie='')
+        r = ldap_server.search_ext_s( base, ldap.SCOPE_SUBTREE, ldap_filter, ['uniqueMember'], serverctrls=[req_ctrl])
 
         if not r:
             raise CourseNotFound('Course {} at {} doesn\'t exist in ELDAP.'.format(course, campus))
@@ -133,6 +166,9 @@ class Sync:
         return team
 
     def create_team(self, team_name, display_name='', team_type='I'):
+
+        print("XXXX-CREATE-MATTERMOST:TEAM::" + team_name)
+
         if not display_name:
             display_name = team_name
 

@@ -46,10 +46,14 @@ def sync(ldap, bind, password, base, courses, url, port, token, scheme):
 
     for course in courses:
         source_courses, team_name = parse_course(course)
-        logger.info('Syncing course {} to team {}.'.format(source_courses, team_name))
+        logger.info('SSSSSSyncing course {} to team {}.'.format(source_courses, team_name))
+
+        logger.info('XXXX:{}'.format(len(source_courses)))
+
         try:
             course_members = []
             for c in source_courses:
+                logger.info('XXXX:{} :: {}'.format(base,c))
                 course_members.extend(mm.get_member_from_ldap(base, *c))
         except CourseNotFound as e:
             logger.warning(e)
@@ -60,6 +64,7 @@ def sync(ldap, bind, password, base, courses, url, port, token, scheme):
             team_name = team_name.replace(" ", "-")
             print("XXXX: CHECK TEAM NAME::" + team_name )
             team = mm.get_team_by_name(team_name)
+            ##team = mm.get_team_by_name("Test111")
             if team:
                 logger.info('Team {} already exists.'.format(team_name))
             else:
