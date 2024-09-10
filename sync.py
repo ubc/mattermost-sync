@@ -56,9 +56,7 @@ def sync(ldap, bind, password, base, courses, url, port, token, scheme):
             continue
 
         try:
-            #team_name = 'TUE TESTTWO2'
             team_name = team_name.replace(" ", "-")
-            print("XXXX: CHECK TEAM NAME::" + team_name )
             team = mm.get_team_by_name(team_name)
             if team:
                 logger.info('Team {} already exists.'.format(team_name))
