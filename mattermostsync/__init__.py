@@ -9,7 +9,7 @@ from mattermostdriver import Driver
 from mattermostdriver.exceptions import ResourceNotFound, InvalidOrMissingParameters
 from requests import HTTPError
 
-## SECTIONS ##############
+## ELDAP NEW SECTIONS ##############
 
 LDAP_USER_SEARCH_BASE = 'ou=PEOPLE,ou=IDM,dc=id,dc=ubc,dc=ca'
 # ['cn', 'sn', 'ubcEduCwlPUID', 'uid', 'displayName', 'givenName', 'mail']
@@ -63,13 +63,13 @@ class Sync:
         self.driver = Driver({k: config[k] for k in config.keys() & Driver.default_options.keys()})
 
     def get_member_from_ldap(self, base, course, campus='V', attributes=LDAP_ATTRIBUTES):
+
         ldap_server = ldap.initialize(self.config['ldap_uri'])
 
         # Split the course string into its components
         parts = course.split()
 
         # Assign the components to respective variables
-        # ex. ELEC_A 201 101 2024
         CourseSubjectCode = parts[0]  # 'ELEC_A'
         CourseNumber = parts[1]  # '201'
         CourseSectionNumber = parts[2]
@@ -77,18 +77,13 @@ class Sync:
         courseCN = "students"
 
         # Create the LDAP filter using the new variables
-        #ldap_filter = '(&(cn={})(ubcAcademicYear={})(ubcCourseSubjectCode={})(ubcCourseNumber={})(ubcCourseSectionNumber={})(ou:dn:={}))'.format(
-        #    courseCN, CourseAcademicYear, CourseSubjectCode, CourseNumber, CourseSectionNumber, campus
-        #)
         ldap_filter = '(&(cn={})(ubcAcademicYear={})(ubcCourseSubjectCode={})(ubcCourseNumber={})(ubcCourseSectionNumber={}))'.format(
-            courseCN, CourseAcademicYear, CourseSubjectCode, CourseNumber, CourseSectionNumber
+            courseCN, CourseAcademicYear, CourseSubjectCode, CourseNumber, CourseSectionNumber, campus
         )
-        #original filter
         #ldap_filter = '(&(cn={})(ou:dn:={}))'.format(course, campus)
 
         ldap_server.simple_bind_s(self.config['bind_user'], self.config['bind_password'])
         ##ldap_filter = '(&(cn={})(ou:dn:={}))'.format(course, campus)
-
 
         ##r = ldap_server.search_s(base, ldap.SCOPE_SUBTREE, ldap_filter, ['uniqueMember'])
         req_ctrl = SimplePagedResultsControl(criticality=True, size=1, cookie='')
@@ -103,8 +98,11 @@ class Sync:
             self.logger.info('Processing {}'.format(dn))
             if (len(entry) == 0):
                 continue
+
             usernames = [x.decode('utf-8').replace(',' + LDAP_USER_SEARCH_BASE, '').replace('uid=', '')
                          for x in entry['uniqueMember']]
+
+            #usernames = "thoang04" + str(ldap_server) + str(attributes)
             users = self.get_users_from_ldap(usernames, ldap_server=ldap_server, attributes=attributes)
             # remove members with duplicate email
             for m in users:
@@ -115,7 +113,7 @@ class Sync:
                 member_emails.append(m['email'])
 
         self.logger.info('Get {} student in course {} {}'.format(len(members), course, campus))
-        self.logger.debug('Students:' + str(members))
+        self.logger.debug('Studentsssss:' + str(members))
         return members
 
     def get_users_from_ldap(self, usernames, ldap_server=None, attributes=LDAP_ATTRIBUTES):
@@ -123,10 +121,24 @@ class Sync:
             ldap_server = ldap.initialize(self.config['ldap_uri'])
             ldap_server.simple_bind_s(self.config['bind_user'], self.config['bind_password'])
 
+
         if not isinstance(usernames, list):
             usernames = [usernames]
 
-        user_filter = "(|(uid={}))".format(')(uid='.join(usernames))
+        # Extract only the uid=name part for each username in the list
+        filtered_usernames = []
+        for username in usernames:
+            match = re.search(r'[^,]+', username)
+            if match:
+                filtered_usernames.append(match.group(0))
+
+        # Now, filtered_usernames contains only the uid=name part
+
+        #result = re.search(r'uid=[^,]+', usernames)
+        #user_filter = "(|(uid={}))".format(')(uid='.join(usernames))
+        user_filter = "(|(uid={}))".format(')(uid='.join(filtered_usernames))
+
+        #user_filter = re.search(r'uid=[^,]+', usernames)
 
         result = ldap_server.search_s(
             LDAP_USER_SEARCH_BASE,
@@ -165,6 +177,7 @@ class Sync:
         return team
 
     def create_team(self, team_name, display_name='', team_type='I'):
+
         if not display_name:
             display_name = team_name
 
