@@ -9,21 +9,15 @@ from mattermostdriver import Driver
 from mattermostdriver.exceptions import ResourceNotFound, InvalidOrMissingParameters
 from requests import HTTPError
 
-## ELDAP NEW SECTIONS ##############
-
 LDAP_USER_SEARCH_BASE = 'ou=PEOPLE,ou=IDM,dc=id,dc=ubc,dc=ca'
-# ['cn', 'sn', 'ubcEduCwlPUID', 'uid', 'displayName', 'givenName', 'mail']
 LDAP_ATTRIBUTES = ('sn', 'ubcEduCwlPUID', 'uid', 'givenName', 'mail')
 
 
 def to_mm_team_name(raw_name):
-    #return re.sub('20(1[0-9])', r'\1', raw_name.replace('_', ''))
-    #modify the code so that it supports both years in the 2010s and 2020s (i.e., 2010 to 2029).
     return re.sub('20(12[0-9])', r'\1', raw_name.replace('_', ''))
 
 
 def split_campus(course):
-    ##return (course[:-1], 'UBCO') if course.endswith('O') or course.endswith('o') else (course, 'UBC')
     return (course[:-1], 'O') if course.endswith('O') or course.endswith('o') else (course, 'V')
 
 
@@ -66,26 +60,25 @@ class Sync:
 
         ldap_server = ldap.initialize(self.config['ldap_uri'])
 
-        # Split the course string into its components
         parts = course.split()
 
         # Assign the components to respective variables
-        CourseSubjectCode = parts[0]  # 'ELEC_A'
-        CourseNumber = parts[1]  # '201'
+        # [courseCODE] [courseNumber] [courseSectionNum] [year] [students (default) / instructor]
+        # 211 101 03 2024 instructors
+        CourseSubjectCode = parts[0]
+        CourseNumber = parts[1]
         CourseSectionNumber = parts[2]
-        CourseAcademicYear = parts[3] # 2024
-        courseCN = "students"
+        CourseAcademicYear = parts[3]
+        courseCN = parts[4] if len(parts) > 4 and parts[4] else "students"
 
         # Create the LDAP filter using the new variables
         ldap_filter = '(&(cn={})(ubcAcademicYear={})(ubcCourseSubjectCode={})(ubcCourseNumber={})(ubcCourseSectionNumber={}))'.format(
             courseCN, CourseAcademicYear, CourseSubjectCode, CourseNumber, CourseSectionNumber, campus
         )
-        #ldap_filter = '(&(cn={})(ou:dn:={}))'.format(course, campus)
+
 
         ldap_server.simple_bind_s(self.config['bind_user'], self.config['bind_password'])
-        ##ldap_filter = '(&(cn={})(ou:dn:={}))'.format(course, campus)
 
-        ##r = ldap_server.search_s(base, ldap.SCOPE_SUBTREE, ldap_filter, ['uniqueMember'])
         req_ctrl = SimplePagedResultsControl(criticality=True, size=1, cookie='')
         r = ldap_server.search_ext_s( base, ldap.SCOPE_SUBTREE, ldap_filter, ['uniqueMember'], serverctrls=[req_ctrl])
 
@@ -102,7 +95,6 @@ class Sync:
             usernames = [x.decode('utf-8').replace(',' + LDAP_USER_SEARCH_BASE, '').replace('uid=', '')
                          for x in entry['uniqueMember']]
 
-            #usernames = "thoang04" + str(ldap_server) + str(attributes)
             users = self.get_users_from_ldap(usernames, ldap_server=ldap_server, attributes=attributes)
             # remove members with duplicate email
             for m in users:
@@ -132,13 +124,7 @@ class Sync:
             if match:
                 filtered_usernames.append(match.group(0))
 
-        # Now, filtered_usernames contains only the uid=name part
-
-        #result = re.search(r'uid=[^,]+', usernames)
-        #user_filter = "(|(uid={}))".format(')(uid='.join(usernames))
         user_filter = "(|(uid={}))".format(')(uid='.join(filtered_usernames))
-
-        #user_filter = re.search(r'uid=[^,]+', usernames)
 
         result = ldap_server.search_s(
             LDAP_USER_SEARCH_BASE,
