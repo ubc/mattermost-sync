@@ -105,7 +105,7 @@ class Sync:
                 member_emails.append(m['email'])
 
         self.logger.info('Get {} student in course {} {}'.format(len(members), course, campus))
-        self.logger.debug('Studentsssss:' + str(members))
+        self.logger.debug('Students:' + str(members))
         return members
 
     def get_users_from_ldap(self, usernames, ldap_server=None, attributes=LDAP_ATTRIBUTES):
