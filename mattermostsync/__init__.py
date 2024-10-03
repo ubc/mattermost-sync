@@ -201,6 +201,7 @@ class Sync:
 
     def get_team_by_name(self, team_name):
         try:
+            print("XXXXX: get_team_by_name: " + team_name)
             team = self.driver.teams.get_team_by_name(team_name)
         except ResourceNotFound:
             return None
