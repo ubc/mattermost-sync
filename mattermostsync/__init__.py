@@ -12,9 +12,14 @@ from requests import HTTPError
 LDAP_USER_SEARCH_BASE = 'ou=PEOPLE,ou=IDM,dc=id,dc=ubc,dc=ca'
 LDAP_ATTRIBUTES = ('sn', 'ubcEduCwlPUID', 'uid', 'givenName', 'mail')
 
+def remove_suffix(raw_name):
+    return re.sub(r'(students|instructors)$', '', raw_name, flags=re.IGNORECASE)
 
 def to_mm_team_name(raw_name):
-    return re.sub('20(12[0-9])', r'\1', raw_name.replace('_', ''))
+    ret_name = re.sub('20(12[0-9])', r'\1', raw_name.replace('_', ''))
+    ret_name = remove_suffix(ret_name)
+    return ret_name
+
 
 
 def split_campus(course):
@@ -58,6 +63,13 @@ class Sync:
 
     def get_member_from_ldap(self, base, course, campus='V', attributes=LDAP_ATTRIBUTES):
 
+        if 'student' in course.lower():
+            role = 'students'
+        elif 'instructor' in course.lower():
+            role = 'instructors'
+        else:
+            role = "role"
+
         ldap_server = ldap.initialize(self.config['ldap_uri'])
 
         parts = course.split()
@@ -69,11 +81,47 @@ class Sync:
         CourseNumber = parts[1]
         CourseSectionNumber = parts[2]
         CourseAcademicYear = parts[3]
-        courseCN = parts[4] if len(parts) > 4 and parts[4] else "students"
+        ##courseCN = parts[4] if len(parts) > 4 and parts[4] else "students"
+        courseCN = role
+
+        # Regex pattern to match and remove 'student', 'students', 'instructor', 'instructors' at the end of the string
+        pattern = r"(student|students|instructor|instructors)$"
+        # Remove the matching word from the end of the string
+        cleaned_course_year = re.sub(pattern, '', CourseAcademicYear, flags=re.IGNORECASE).strip()
+
+        CourseAcademicYear = cleaned_course_year
+        # Extract year, campus, season, and session number from parts[3]
+        #year_pattern = r"([VO])(\d{4})([WS])(\d)"
+        #course_info = re.search(year_pattern, CourseAcademicYear)
+
+        ##CourseAcademicYear = 'V2029S'
+        # Define a regex pattern to match years from 2022 to 2030, case-insensitive
+        year_pattern = r"([vo])(\d{4})([ws])(\d)?"
+        course_info = re.search(year_pattern, CourseAcademicYear, re.IGNORECASE)
+
+        if course_info:
+            courseCampus, CourseAcademicYear, courseSeason, courseSessionNumber = course_info.groups()
+
+            courseSessionNumber = course_info.group(4) if course_info.group(4) is not None else ''
+
+            # Map courseSeason to readable format
+            # Normalize courseSeason to upper case for consistent comparison
+            courseSeason = 'Winter' if courseSeason.upper() == 'W' else 'Summer'
+
+            # Change "Term" to "Session" if courseSessionNumber is empty
+            if courseSessionNumber == '':
+                coursePeriodType = f"{courseSeason} Session"
+            else:
+                coursePeriodType = f"{courseSeason} Term {courseSessionNumber}"
+
+
+        else:
+            courseCampus, CourseAcademicYear, courseSeason, courseSessionNumber, coursePeriodType = None, None, None, None, None
+
 
         # Create the LDAP filter using the new variables
-        ldap_filter = '(&(cn={})(ubcAcademicYear={})(ubcCourseSubjectCode={})(ubcCourseNumber={})(ubcCourseSectionNumber={}))'.format(
-            courseCN, CourseAcademicYear, CourseSubjectCode, CourseNumber, CourseSectionNumber, campus
+        ldap_filter = '(&(cn={})(ubcAcademicYear={})(ubcAcademicPeriodType={})(ubcCourseSubjectCode={})(ubcCourseNumber={})(ubcCourseSectionNumber={}))'.format(
+            courseCN, CourseAcademicYear, coursePeriodType, CourseSubjectCode, CourseNumber, CourseSectionNumber, campus
         )
 
 
@@ -196,10 +244,6 @@ class Sync:
         for i in users:
             if i['username'] not in existing_usernames:
                 # no password field allowed when creating ldap user
-                # i['password'] = ''.join(secrets.choice(alphabet) for i in range(20))
-                # auth_service and auth_data are undocumented properties from user.create_user API
-                # they are used in bulk load though
-                # https://docs.mattermost.com/deployment/bulk-loading-data-format.html#data-format
                 i['auth_service'] = 'ldap'
                 i['auth_data'] = i['username']
                 if not i['email']:
