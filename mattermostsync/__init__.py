@@ -3,22 +3,27 @@ import json
 import ldap
 import logging
 import re
+
+from ldap.controls import SimplePagedResultsControl
 from mattermostdriver import Driver
 from mattermostdriver.exceptions import ResourceNotFound, InvalidOrMissingParameters
 from requests import HTTPError
 
-
 LDAP_USER_SEARCH_BASE = 'ou=PEOPLE,ou=IDM,dc=id,dc=ubc,dc=ca'
-# ['cn', 'sn', 'ubcEduCwlPUID', 'uid', 'displayName', 'givenName', 'mail']
 LDAP_ATTRIBUTES = ('sn', 'ubcEduCwlPUID', 'uid', 'givenName', 'mail')
 
+def remove_suffix(raw_name):
+    return re.sub(r'(students|instructors)$', '', raw_name, flags=re.IGNORECASE)
 
 def to_mm_team_name(raw_name):
-    return re.sub('20(1[0-9])', r'\1', raw_name.replace('_', ''))
+    ret_name = re.sub('20(12[0-9])', r'\1', raw_name.replace('_', ''))
+    ret_name = remove_suffix(ret_name)
+    return ret_name
+
 
 
 def split_campus(course):
-    return (course[:-1], 'UBCO') if course.endswith('O') or course.endswith('o') else (course, 'UBC')
+    return (course[:-1], 'O') if course.endswith('O') or course.endswith('o') else (course, 'V')
 
 
 def get_dummy_email(username):
@@ -56,11 +61,74 @@ class Sync:
         self.config = config
         self.driver = Driver({k: config[k] for k in config.keys() & Driver.default_options.keys()})
 
-    def get_member_from_ldap(self, base, course, campus='UBC', attributes=LDAP_ATTRIBUTES):
+    def get_member_from_ldap(self, base, course, campus='V', attributes=LDAP_ATTRIBUTES):
+
+        if 'student' in course.lower():
+            role = 'students'
+        elif 'instructor' in course.lower():
+            role = 'instructors'
+        else:
+            role = "role"
+
         ldap_server = ldap.initialize(self.config['ldap_uri'])
+
+        parts = course.split()
+
+        # Assign the components to respective variables
+        # [courseCODE] [courseNumber] [courseSectionNum] [year] [students (default) / instructor]
+        # 211 101 03 2024 instructors
+        CourseSubjectCode = parts[0]
+        CourseNumber = parts[1]
+        CourseSectionNumber = parts[2]
+        CourseAcademicYear = parts[3]
+        ##courseCN = parts[4] if len(parts) > 4 and parts[4] else "students"
+        courseCN = role
+
+        # Regex pattern to match and remove 'student', 'students', 'instructor', 'instructors' at the end of the string
+        pattern = r"(student|students|instructor|instructors)$"
+        # Remove the matching word from the end of the string
+        cleaned_course_year = re.sub(pattern, '', CourseAcademicYear, flags=re.IGNORECASE).strip()
+
+        CourseAcademicYear = cleaned_course_year
+        # Extract year, campus, season, and session number from parts[3]
+        #year_pattern = r"([VO])(\d{4})([WS])(\d)"
+        #course_info = re.search(year_pattern, CourseAcademicYear)
+
+        ##CourseAcademicYear = 'V2029S'
+        # Define a regex pattern to match years from 2022 to 2030, case-insensitive
+        year_pattern = r"([vo])(\d{4})([ws])(\d)?"
+        course_info = re.search(year_pattern, CourseAcademicYear, re.IGNORECASE)
+
+        if course_info:
+            courseCampus, CourseAcademicYear, courseSeason, courseSessionNumber = course_info.groups()
+
+            courseSessionNumber = course_info.group(4) if course_info.group(4) is not None else ''
+
+            # Map courseSeason to readable format
+            # Normalize courseSeason to upper case for consistent comparison
+            courseSeason = 'Winter' if courseSeason.upper() == 'W' else 'Summer'
+
+            # Change "Term" to "Session" if courseSessionNumber is empty
+            if courseSessionNumber == '':
+                coursePeriodType = f"{courseSeason} Session"
+            else:
+                coursePeriodType = f"{courseSeason} Term {courseSessionNumber}"
+
+
+        else:
+            courseCampus, CourseAcademicYear, courseSeason, courseSessionNumber, coursePeriodType = None, None, None, None, None
+
+
+        # Create the LDAP filter using the new variables
+        ldap_filter = '(&(cn={})(ubcAcademicYear={})(ubcAcademicPeriodType={})(ubcCourseSubjectCode={})(ubcCourseNumber={})(ubcCourseSectionNumber={}))'.format(
+            courseCN, CourseAcademicYear, coursePeriodType, CourseSubjectCode, CourseNumber, CourseSectionNumber, campus
+        )
+
+
         ldap_server.simple_bind_s(self.config['bind_user'], self.config['bind_password'])
-        ldap_filter = '(&(cn={})(ou:dn:={}))'.format(course, campus)
-        r = ldap_server.search_s(base, ldap.SCOPE_SUBTREE, ldap_filter, ['uniqueMember'])
+
+        req_ctrl = SimplePagedResultsControl(criticality=True, size=1, cookie='')
+        r = ldap_server.search_ext_s( base, ldap.SCOPE_SUBTREE, ldap_filter, ['uniqueMember'], serverctrls=[req_ctrl])
 
         if not r:
             raise CourseNotFound('Course {} at {} doesn\'t exist in ELDAP.'.format(course, campus))
@@ -71,8 +139,10 @@ class Sync:
             self.logger.info('Processing {}'.format(dn))
             if (len(entry) == 0):
                 continue
+
             usernames = [x.decode('utf-8').replace(',' + LDAP_USER_SEARCH_BASE, '').replace('uid=', '')
                          for x in entry['uniqueMember']]
+
             users = self.get_users_from_ldap(usernames, ldap_server=ldap_server, attributes=attributes)
             # remove members with duplicate email
             for m in users:
@@ -91,10 +161,18 @@ class Sync:
             ldap_server = ldap.initialize(self.config['ldap_uri'])
             ldap_server.simple_bind_s(self.config['bind_user'], self.config['bind_password'])
 
+
         if not isinstance(usernames, list):
             usernames = [usernames]
 
-        user_filter = "(|(uid={}))".format(')(uid='.join(usernames))
+        # Extract only the uid=name part for each username in the list
+        filtered_usernames = []
+        for username in usernames:
+            match = re.search(r'[^,]+', username)
+            if match:
+                filtered_usernames.append(match.group(0))
+
+        user_filter = "(|(uid={}))".format(')(uid='.join(filtered_usernames))
 
         result = ldap_server.search_s(
             LDAP_USER_SEARCH_BASE,
@@ -123,6 +201,7 @@ class Sync:
 
     def get_team_by_name(self, team_name):
         try:
+            print("XXXXX: get_team_by_name: " + team_name)
             team = self.driver.teams.get_team_by_name(team_name)
         except ResourceNotFound:
             return None
@@ -133,6 +212,7 @@ class Sync:
         return team
 
     def create_team(self, team_name, display_name='', team_type='I'):
+
         if not display_name:
             display_name = team_name
 
@@ -165,10 +245,6 @@ class Sync:
         for i in users:
             if i['username'] not in existing_usernames:
                 # no password field allowed when creating ldap user
-                # i['password'] = ''.join(secrets.choice(alphabet) for i in range(20))
-                # auth_service and auth_data are undocumented properties from user.create_user API
-                # they are used in bulk load though
-                # https://docs.mattermost.com/deployment/bulk-loading-data-format.html#data-format
                 i['auth_service'] = 'ldap'
                 i['auth_data'] = i['username']
                 if not i['email']:

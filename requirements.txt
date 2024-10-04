@@ -4,3 +4,15 @@ click==6.7
 click-log==0.3.2
 mattermostdriver==7.3.1
 python-ldap==3.4.3
+slack
+slackclient
+fastapi
+slack
+pathlib
+slackeventsapi
+requests
+google.generativeai
+flask
+python-dotenv
+python-dotenv
+python-multipart

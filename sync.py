@@ -56,6 +56,9 @@ def sync(ldap, bind, password, base, courses, url, port, token, scheme):
             continue
 
         try:
+            team_name = team_name.strip()
+            team_name = team_name.replace(" ", "-")
+
             team = mm.get_team_by_name(team_name)
             if team:
                 logger.info('Team {} already exists.'.format(team_name))
@@ -89,6 +92,7 @@ def sync(ldap, bind, password, base, courses, url, port, token, scheme):
             logging.error('Failed to sync team {}: {}'.format(team_name, e.args))
             continue
         logger.info('Finished to sync course {}.'.format(course))
+
 
 
 if __name__ == "__main__":
