@@ -1,3 +1,5 @@
+# As we decommissioned our instance, this repo will not be updated anymore. Please use the upstream repo for future updates.
+
 # Mattermost Sync
 
 The script sync LDAP groups to Mattermost teams. The script will load
